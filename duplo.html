@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Palavrasurge — Duplo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+  :root {
+    --teal: #5B9EA0; --teal-dark: #3D7A7D; --teal-light: #EEF6F6; --teal-mid: #A8CFCF;
+    --charcoal: #2D3B3C; --slate: #4A5568; --white: #FFFFFF; --bg: #F8FBFB;
+    --color-correct: #3D7A7D; --color-misplaced: #C9973B; --color-wrong: #4A5568; --color-empty: #d4dede;
+    --tile-size: 48px; --tile-gap: 4px; --key-height: 52px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', sans-serif; background: var(--bg); color: var(--charcoal);
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 100dvh; overflow-x: hidden; user-select: none; -webkit-user-select: none;
+  }
+  header { width: 100%; max-width: 600px; display: flex; align-items: center; justify-content: center; padding: 12px 20px 2px; position: relative; }
+  header h1 { font-size: 1.4rem; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
+  header h1 span { color: var(--teal); }
+  .back-link { position: absolute; left: 20px; color: var(--teal-dark); text-decoration: none; font-size: 1.2rem; }
+  .help-link { position: absolute; left: 46px; width: 22px; height: 22px; border: 1px solid var(--teal-mid); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--slate); background: none; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .help-link:hover { border-color: var(--teal); color: var(--teal-dark); }
+  .help-toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); background: var(--white); border: 1px solid var(--teal-mid); border-radius: 12px; padding: 16px 20px; max-width: 340px; width: 90%; box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 150; font-size: 0.78rem; color: var(--slate); line-height: 1.6; animation: fadeIn 0.2s ease; }
+  .help-toast strong { color: var(--charcoal); }
+  .help-toast .ht-close { position: absolute; top: 8px; right: 12px; background: none; border: none; font-size: 1rem; color: var(--slate); cursor: pointer; }
+  .give-up-link { position: absolute; right: 48px; background: none; border: none; color: var(--slate); font-size: 0.75rem; cursor: pointer; opacity: 0.45; transition: opacity 0.2s; letter-spacing: 0.5px; text-decoration: underline; text-underline-offset: 2px; }
+  .give-up-link:hover { opacity: 0.9; }
+  .subtitle { font-size: 0.7rem; color: var(--slate); margin-bottom: 8px; letter-spacing: 1px; }
+  #stats-bar { display: flex; gap: 16px; margin-bottom: 6px; font-size: 0.75rem; color: var(--slate); align-items: center; }
+  #stats-bar .stat-val { font-weight: 700; color: var(--teal-dark); }
+  #btn-reset-stats { background: none; border: 1px solid var(--color-empty); border-radius: 50%; width: 24px; height: 24px; font-size: 0.85rem; color: var(--slate); cursor: pointer; display: flex; align-items: center; justify-content: center; margin-left: 4px; transition: all 0.2s; }
+  #btn-reset-stats:hover { border-color: var(--teal); color: var(--teal-dark); }
+
+  .boards-container { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
+  .board-wrapper { position: relative; }
+  .board-label { text-align: center; font-size: 0.65rem; font-weight: 700; color: var(--slate); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+  .board { display: grid; grid-template-rows: repeat(7, var(--tile-size)); gap: var(--tile-gap); }
+  .row { display: grid; grid-template-columns: repeat(5, var(--tile-size)); gap: var(--tile-gap); }
+  /* Fix E — cursor: pointer on tiles */
+  .tile {
+    width: var(--tile-size); height: var(--tile-size); display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem; font-weight: 700; text-transform: uppercase;
+    border: 2px solid var(--color-empty); border-radius: 5px; background: var(--white); color: var(--charcoal);
+    transition: transform 0.1s; cursor: pointer;
+  }
+  .tile.filled { border-color: var(--teal-mid); }
+  .tile.selected { border-color: var(--teal); box-shadow: 0 0 0 2px var(--teal); }
+  .tile.reveal { animation: flip 0.4s ease forwards; }
+  .tile.correct  { background: var(--color-correct); border-color: var(--color-correct); color: var(--white); }
+  .tile.misplaced { background: var(--color-misplaced); border-color: var(--color-misplaced); color: var(--white); }
+  .tile.wrong    { background: var(--color-wrong); border-color: var(--color-wrong); color: var(--white); }
+  .solved-overlay {
+    position: absolute; inset: 0; background: rgba(61,122,125,0.12); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; pointer-events: none;
+  }
+  .solved-overlay .check { font-size: 2.5rem; color: var(--teal-dark); }
+
+  @keyframes pop { 0%{transform:scale(1)}50%{transform:scale(1.1)}100%{transform:scale(1)} }
+  @keyframes flip { 0%{transform:scaleY(1)}50%{transform:scaleY(0)}100%{transform:scaleY(1)} }
+  @keyframes shake { 0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-4px)}40%,80%{transform:translateX(4px)} }
+  @keyframes bounce { 0%,100%{transform:translateY(0)}40%{transform:translateY(-16px)}60%{transform:translateY(-8px)} }
+  .row.shake { animation: shake 0.4s ease; }
+
+  .legend { margin-bottom: 16px; display: flex; gap: 14px; justify-content: center; font-size: 0.65rem; color: var(--slate); }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+
+  #keyboard { width: 100%; max-width: 520px; padding: 0 4px; }
+  .kb-row { display: flex; justify-content: center; gap: 4px; margin-bottom: 4px; }
+  .key {
+    height: var(--key-height); min-width: 32px; padding: 0 5px; border: none; border-radius: 6px;
+    background: var(--teal-light); color: var(--charcoal); font-family: 'Inter', sans-serif;
+    font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center;
+    justify-content: center; text-transform: uppercase; transition: background 0.2s, color 0.2s;
+    flex: 1; max-width: 42px;
+  }
+  .key:active { transform: scale(0.93); }
+  .key.wide { min-width: 56px; max-width: 66px; font-size: 0.7rem; }
+  .key.correct  { background: var(--color-correct); color: var(--white); }
+  .key.misplaced { background: var(--color-misplaced); color: var(--white); }
+  .key.wrong    { background: var(--color-wrong); color: var(--white); }
+
+  #toast-container { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .toast { background: var(--charcoal); color: var(--white); padding: 8px 18px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; animation: fadeInOut 1.8s ease forwards; white-space: nowrap; }
+  @keyframes fadeInOut { 0%{opacity:0;transform:translateY(-10px)}15%{opacity:1;transform:translateY(0)}75%{opacity:1}100%{opacity:0} }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(45,59,60,0.5); display: flex; align-items: center; justify-content: center; z-index: 200; backdrop-filter: blur(3px); animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from{opacity:0}to{opacity:1} }
+  .modal { background: var(--white); border-radius: 14px; padding: 28px 24px; max-width: 380px; width: 92%; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.15); }
+  .modal h2 { font-size: 1.2rem; margin-bottom: 6px; }
+  .modal .word-reveal { font-size: 1.4rem; font-weight: 800; color: var(--teal-dark); letter-spacing: 3px; margin: 10px 0 14px; text-transform: uppercase; }
+  .modal .modal-stats { display: flex; justify-content: center; gap: 20px; margin-bottom: 18px; }
+  .modal .modal-stats div { display: flex; flex-direction: column; align-items: center; }
+  .modal .modal-stats .num { font-size: 1.4rem; font-weight: 800; color: var(--teal-dark); }
+  .modal .modal-stats .label { font-size: 0.65rem; color: var(--slate); text-transform: uppercase; }
+  .btn-play { background: var(--teal); color: var(--white); border: none; border-radius: 8px; padding: 11px 32px; font-family: 'Inter', sans-serif; font-size: 0.95rem; font-weight: 700; cursor: pointer; }
+  .btn-play:hover { background: var(--teal-dark); }
+  /* Fix C+D — choice modal buttons */
+  .btn-choice-continue { background: var(--teal); color: var(--white); border: none; border-radius: 8px; padding: 11px 28px; font-family: 'Inter', sans-serif; font-size: 0.95rem; font-weight: 700; cursor: pointer; margin-bottom: 10px; width: 100%; }
+  .btn-choice-continue:hover { background: var(--teal-dark); }
+  .btn-choice-giveup { background: none; border: none; color: var(--slate); font-family: 'Inter', sans-serif; font-size: 0.85rem; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; opacity: 0.7; }
+  .btn-choice-giveup:hover { opacity: 1; }
+  @media (max-width: 520px) {
+    :root { --tile-size: 40px; --tile-gap: 3px; --key-height: 48px; }
+    .tile { font-size: 1.1rem; } .key { font-size: 0.8rem; min-width: 27px; } .key.wide { min-width: 46px; }
+    .boards-container { gap: 12px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" class="back-link" title="Menu">&#8592;</a>
+  <button class="help-link" id="btn-help" title="Como jogar">?</button>
+  <h1>Palavra<span>surge</span> Duplo</h1>
+  <button id="btn-give-up" class="give-up-link" title="Desistir">Desistir</button>
+</header>
+<div class="subtitle">2 palavras em simultâneo — 7 tentativas</div>
+<div id="stats-bar">
+  <div>Jogos: <span class="stat-val" id="s-played">0</span></div>
+  <div>Vitórias: <span class="stat-val" id="s-wins">0</span></div>
+  <div>Sequência: <span class="stat-val" id="s-streak">0</span></div>
+  <button id="btn-reset-stats" title="Limpar estatísticas">↺</button>
+</div>
+
+<div class="boards-container" id="boards-container"></div>
+<!-- Fix C+D — "+" button REMOVED. Extra rows only via modal. -->
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--color-correct)"></div> Certa</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--color-misplaced)"></div> Lugar errado</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--color-wrong)"></div> Não existe</div>
+</div>
+<div id="keyboard"></div>
+<div id="toast-container"></div>
+
+<script src="words.js"></script>
+<script>
+const NUM_BOARDS = 2, INITIAL_ROWS = 7, COLS = 5;
+let ROWS = INITIAL_ROWS;
+let answers = [], currentRow = 0, cursorCol = 0, guessLetters = Array(COLS).fill("");
+let gameOver = false, revealing = false, keyStates = {}, boardSolved = [], forceNext = false;
+// Fix F — track attempts
+let attemptCount = 0;
+let stats = JSON.parse(localStorage.getItem("termo-duo-stats") || '{"played":0,"wins":0,"streak":0,"best":0}');
+
+function norm(s) { return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
+
+// Fix E — reusable tile click listener factory
+function addTileClickListener(tile) {
+  tile.addEventListener("click", () => {
+    const b = parseInt(tile.dataset.board);
+    const r = parseInt(tile.dataset.row);
+    const col = parseInt(tile.dataset.col);
+    if (!gameOver && !revealing && r === currentRow && !boardSolved[b]) {
+      cursorCol = col;
+      updateCursor();
+    }
+  });
+}
+
+// Build boards
+const container = document.getElementById("boards-container");
+for (let b = 0; b < NUM_BOARDS; b++) {
+  const wrapper = document.createElement("div"); wrapper.className = "board-wrapper"; wrapper.dataset.board = b;
+  const label = document.createElement("div"); label.className = "board-label"; label.textContent = `Palavra ${b + 1}`;
+  const board = document.createElement("div"); board.className = "board"; board.dataset.board = b;
+  for (let r = 0; r < ROWS; r++) {
+    const row = document.createElement("div"); row.className = "row"; row.dataset.board = b; row.dataset.row = r;
+    for (let c = 0; c < COLS; c++) {
+      const tile = document.createElement("div"); tile.className = "tile"; tile.dataset.board = b; tile.dataset.row = r; tile.dataset.col = c;
+      addTileClickListener(tile); // Fix E
+      row.appendChild(tile);
+    }
+    board.appendChild(row);
+  }
+  wrapper.appendChild(label); wrapper.appendChild(board); container.appendChild(wrapper);
+}
+
+// Keyboard
+const KB = [["q","w","e","r","t","y","u","i","o","p"],["a","s","d","f","g","h","j","k","l"],["ENTER","z","x","c","v","b","n","m","⌫"]];
+const keyboard = document.getElementById("keyboard");
+KB.forEach(row => {
+  const kbRow = document.createElement("div"); kbRow.className = "kb-row";
+  row.forEach(key => {
+    const btn = document.createElement("button");
+    btn.className = "key" + (key === "ENTER" || key === "⌫" ? " wide" : "");
+    btn.textContent = key; btn.dataset.key = key;
+    btn.addEventListener("click", () => handleKey(key));
+    kbRow.appendChild(btn);
+  });
+  keyboard.appendChild(kbRow);
+});
+
+function getTile(b, r, c) { return document.querySelector(`.tile[data-board="${b}"][data-row="${r}"][data-col="${c}"]`); }
+function getRow(b, r) { return document.querySelector(`.row[data-board="${b}"][data-row="${r}"]`); }
+
+function updateCursor() {
+  for (let b = 0; b < NUM_BOARDS; b++) {
+    for (let c = 0; c < COLS; c++) {
+      const tile = getTile(b, currentRow, c);
+      if (!tile) continue;
+      tile.classList.remove("selected");
+      if (boardSolved[b]) continue;
+      tile.textContent = guessLetters[c];
+      if (guessLetters[c]) tile.classList.add("filled"); else tile.classList.remove("filled");
+    }
+    if (!boardSolved[b] && !gameOver && !revealing) {
+      const t = getTile(b, currentRow, cursorCol);
+      if (t) t.classList.add("selected");
+    }
+  }
+}
+
+function handleKey(key) {
+  if (gameOver || revealing) return;
+  if (key === "⌫" || key === "Backspace") {
+    if (guessLetters[cursorCol] !== "") { guessLetters[cursorCol] = ""; }
+    else if (cursorCol > 0) { cursorCol--; guessLetters[cursorCol] = ""; }
+    updateCursor(); return;
+  }
+  if (key === "ENTER" || key === "Enter") {
+    if (guessLetters.some(l => l === "")) { showToast("Faltam letras"); for (let b = 0; b < NUM_BOARDS; b++) if (!boardSolved[b]) shakeRow(b, currentRow); return; }
+    const g = guessLetters.join("");
+    if (!forceNext && !ALL_VALID.has(norm(g))) { showToast("Não reconhecida — Enter para forçar"); for (let b = 0; b < NUM_BOARDS; b++) if (!boardSolved[b]) shakeRow(b, currentRow); forceNext = true; return; }
+    forceNext = false;
+    submitGuess(g); return;
+  }
+  if (key === "ArrowLeft") { if (cursorCol > 0) cursorCol--; updateCursor(); return; }
+  if (key === "ArrowRight") { if (cursorCol < COLS - 1) cursorCol++; updateCursor(); return; }
+  const letter = key.toLowerCase();
+  if (/^[a-z]$/.test(letter)) {
+    forceNext = false;
+    guessLetters[cursorCol] = letter;
+    let next = cursorCol + 1;
+    while (next < COLS && guessLetters[next] !== "") next++;
+    if (next >= COLS) next = COLS - 1;
+    cursorCol = next;
+    updateCursor();
+  }
+}
+
+function evaluate(guess, answer) {
+  const g = norm(guess), a = norm(answer);
+  const result = Array(COLS).fill("wrong");
+  const aUsed = Array(COLS).fill(false), gUsed = Array(COLS).fill(false);
+  for (let i = 0; i < COLS; i++) { if (g[i] === a[i]) { result[i] = "correct"; aUsed[i] = true; gUsed[i] = true; } }
+  for (let i = 0; i < COLS; i++) { if (gUsed[i]) continue; for (let j = 0; j < COLS; j++) { if (!aUsed[j] && g[i] === a[j]) { result[i] = "misplaced"; aUsed[j] = true; break; } } }
+  return result;
+}
+
+function submitGuess(guess) {
+  revealing = true;
+  attemptCount++; // Fix F
+  const results = [];
+  for (let b = 0; b < NUM_BOARDS; b++) {
+    results[b] = boardSolved[b] ? null : evaluate(guess, answers[b]);
+  }
+
+  let maxDelay = 0;
+  for (let b = 0; b < NUM_BOARDS; b++) {
+    if (boardSolved[b]) {
+      for (let c = 0; c < COLS; c++) {
+        const tile = getTile(b, currentRow, c);
+        tile.textContent = guessLetters[c]; tile.style.opacity = "0.3";
+      }
+      continue;
+    }
+    const tiles = [];
+    for (let c = 0; c < COLS; c++) tiles.push(getTile(b, currentRow, c));
+    tiles.forEach(t => t.classList.remove("selected"));
+    tiles.forEach((tile, i) => {
+      const delay = i * 250;
+      if (delay + 300 > maxDelay) maxDelay = delay + 300;
+      setTimeout(() => { tile.classList.add("reveal"); setTimeout(() => tile.classList.add(results[b][i]), 200); }, delay);
+    });
+  }
+
+  setTimeout(() => {
+    for (let b = 0; b < NUM_BOARDS; b++) {
+      if (boardSolved[b] || !results[b]) continue;
+      const g = norm(guess);
+      for (let i = 0; i < COLS; i++) {
+        const l = g[i], prev = keyStates[l];
+        if (results[b][i] === "correct") keyStates[l] = "correct";
+        else if (results[b][i] === "misplaced" && prev !== "correct") keyStates[l] = "misplaced";
+        else if (!prev) keyStates[l] = "wrong";
+      }
+      if (norm(guess) === norm(answers[b])) {
+        boardSolved[b] = true;
+        addSolvedOverlay(b);
+      }
+    }
+    updateKeyboard();
+
+    const allSolved = boardSolved.every(s => s);
+    if (allSolved) {
+      gameOver = true; stats.played++; stats.wins++; stats.streak++;
+      if (stats.streak > stats.best) stats.best = stats.streak;
+      saveStats(); setTimeout(() => showEndModal(true), 800);
+    } else if (currentRow === ROWS - 1) {
+      // Fix C+D — show choice modal instead of "+" button
+      setTimeout(() => showChoiceModal(), 600);
+    }
+    if (!allSolved) {
+      currentRow++; cursorCol = 0; guessLetters = Array(COLS).fill("");
+    }
+    revealing = false; if (!gameOver) updateCursor();
+  }, maxDelay + 250);
+}
+
+// Fix C+D — choice modal
+function showChoiceModal() {
+  if (gameOver) return;
+  const o = document.createElement("div"); o.className = "modal-overlay"; o.id = "choice-modal-overlay";
+  o.innerHTML = `<div class="modal">
+    <h2 style="margin-bottom:10px;">Tentativas esgotadas</h2>
+    <p style="font-size:0.85rem;color:var(--slate);margin-bottom:20px;">Queres continuar ou desistir?</p>
+    <button class="btn-choice-continue" id="btn-choice-continue">Continuar (+3)</button>
+    <button class="btn-choice-giveup" id="btn-choice-giveup">Desistir e ver a palavra</button>
+  </div>`;
+  document.body.appendChild(o);
+  document.getElementById("btn-choice-continue").addEventListener("click", () => {
+    o.remove();
+    addExtraRows(3);
+  });
+  document.getElementById("btn-choice-giveup").addEventListener("click", () => {
+    o.remove();
+    giveUp();
+  });
+}
+
+function addSolvedOverlay(b) {
+  const wrapper = document.querySelector(`.board-wrapper[data-board="${b}"]`);
+  if (wrapper.querySelector(".solved-overlay")) return;
+  const ov = document.createElement("div"); ov.className = "solved-overlay";
+  ov.innerHTML = '<div class="check">✓</div>';
+  wrapper.appendChild(ov);
+}
+
+function updateKeyboard() {
+  document.querySelectorAll(".key").forEach(btn => {
+    const k = norm(btn.dataset.key);
+    if (keyStates[k]) btn.className = "key" + (btn.classList.contains("wide") ? " wide" : "") + " " + keyStates[k];
+  });
+}
+function shakeRow(b, r) { const row = getRow(b, r); if (row) { row.classList.add("shake"); setTimeout(() => row.classList.remove("shake"), 500); } }
+function showToast(msg) { const c = document.getElementById("toast-container"), t = document.createElement("div"); t.className = "toast"; t.textContent = msg; c.appendChild(t); setTimeout(() => t.remove(), 2000); }
+function saveStats() { localStorage.setItem("termo-duo-stats", JSON.stringify(stats)); updateStatsBar(); }
+function updateStatsBar() { document.getElementById("s-played").textContent = stats.played; document.getElementById("s-wins").textContent = stats.wins; document.getElementById("s-streak").textContent = stats.streak; }
+
+async function fetchDefinition(word) {
+  try {
+    const r = await fetch(`https://api.dicionario-aberto.net/word/${encodeURIComponent(word)}`);
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (!data || !data.length || !data[0].xml) return null;
+    const match = data[0].xml.match(/<def>\n?([\s\S]*?)\n?<\/def>/);
+    if (!match) return null;
+    return match[1].replace(/[_()]/g, "").replace(/\n/g, " ").trim().split(/\.\s*/)[0] + ".";
+  } catch { return null; }
+}
+
+// Fix F — attemptCount passed to modal
+function showEndModal(won) {
+  const o = document.createElement("div"); o.className = "modal-overlay";
+  const pct = stats.played ? Math.round(stats.wins / stats.played * 100) : 0;
+  const wordsHtml = answers.map((a) => `<span style="margin:0 8px">${a}</span>`).join("");
+  const subtitle = won
+    ? `${attemptCount} tentativa${attemptCount !== 1 ? "s" : ""}`
+    : "Desististe";
+  o.innerHTML = `<div class="modal"><h2>${won ? "Duplo resolvido!" : "Não foi desta vez"}</h2>
+    <div class="word-reveal">${wordsHtml}</div>
+    <div style="font-size:0.85rem;color:var(--slate);margin-bottom:14px;">${subtitle}</div>
+    <div id="def-box" style="font-size:0.78rem;color:var(--slate);margin-bottom:14px;font-style:italic;min-height:1.2em;"></div>
+    <div class="modal-stats"><div><span class="num">${stats.played}</span><span class="label">Jogos</span></div><div><span class="num">${pct}%</span><span class="label">Vitórias</span></div>
+    <div><span class="num">${stats.streak}</span><span class="label">Sequência</span></div><div><span class="num">${stats.best}</span><span class="label">Melhor</span></div></div>
+    <button class="btn-play" id="btn-new">Jogar outra vez</button></div>`;
+  document.body.appendChild(o);
+  document.getElementById("btn-new").addEventListener("click", () => { o.remove(); resetGame(); });
+  Promise.all(answers.map(a => fetchDefinition(a))).then(defs => {
+    const box = document.getElementById("def-box");
+    if (box) {
+      const lines = answers.map((a, i) => defs[i] ? `${a}: ${defs[i]}` : "").filter(Boolean);
+      box.innerHTML = lines.join("<br>");
+    }
+  });
+}
+
+function giveUp() {
+  if (gameOver) return;
+  gameOver = true; stats.played++; stats.streak = 0; saveStats();
+  showEndModal(false);
+}
+
+document.getElementById("btn-give-up").addEventListener("click", () => { if (!gameOver && confirm("Desistir?")) giveUp(); });
+
+function addExtraRows(n) {
+  for (let b = 0; b < NUM_BOARDS; b++) {
+    const boardEl = document.querySelector(`.board[data-board="${b}"]`);
+    for (let r = ROWS; r < ROWS + n; r++) {
+      const row = document.createElement("div"); row.className = "row"; row.dataset.board = b; row.dataset.row = r;
+      for (let c = 0; c < COLS; c++) {
+        const tile = document.createElement("div"); tile.className = "tile"; tile.dataset.board = b; tile.dataset.row = r; tile.dataset.col = c;
+        addTileClickListener(tile); // Fix E — also in extra rows
+        row.appendChild(tile);
+      }
+      boardEl.appendChild(row);
+    }
+  }
+  ROWS += n;
+  updateCursor();
+}
+
+function pickAnswers() {
+  const pool = [...ANSWERS]; answers = [];
+  for (let i = 0; i < NUM_BOARDS; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    answers.push(pool.splice(idx, 1)[0]);
+  }
+}
+
+function resetGame() {
+  pickAnswers(); ROWS = INITIAL_ROWS;
+  currentRow = 0; cursorCol = 0; guessLetters = Array(COLS).fill(""); gameOver = false; revealing = false;
+  keyStates = {}; boardSolved = Array(NUM_BOARDS).fill(false);
+  attemptCount = 0; // Fix F reset
+  const container = document.getElementById("boards-container");
+  container.innerHTML = "";
+  for (let b = 0; b < NUM_BOARDS; b++) {
+    const wrapper = document.createElement("div"); wrapper.className = "board-wrapper"; wrapper.dataset.board = b;
+    const label = document.createElement("div"); label.className = "board-label"; label.textContent = `Palavra ${b + 1}`;
+    const boardEl = document.createElement("div"); boardEl.className = "board"; boardEl.dataset.board = b;
+    for (let r = 0; r < ROWS; r++) {
+      const row = document.createElement("div"); row.className = "row"; row.dataset.board = b; row.dataset.row = r;
+      for (let c = 0; c < COLS; c++) {
+        const tile = document.createElement("div"); tile.className = "tile"; tile.dataset.board = b; tile.dataset.row = r; tile.dataset.col = c;
+        addTileClickListener(tile); // Fix E — also in resetGame rebuild
+        row.appendChild(tile);
+      }
+      boardEl.appendChild(row);
+    }
+    wrapper.appendChild(label); wrapper.appendChild(boardEl); container.appendChild(wrapper);
+  }
+  document.querySelectorAll(".key").forEach(b => { const w = b.classList.contains("wide"); b.className = "key" + (w ? " wide" : ""); });
+  updateCursor();
+}
+
+document.getElementById("btn-reset-stats").addEventListener("click", () => {
+  if (confirm("Limpar todas as estatísticas?")) {
+    stats = { played: 0, wins: 0, streak: 0, best: 0 };
+    saveStats();
+  }
+});
+
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "Enter") handleKey("Enter");
+  else if (e.key === "Backspace") handleKey("Backspace");
+  else if (e.key === "ArrowLeft") handleKey("ArrowLeft");
+  else if (e.key === "ArrowRight") handleKey("ArrowRight");
+  else if (/^[a-zA-Z]$/.test(e.key)) handleKey(e.key);
+});
+
+updateStatsBar();
+resetGame();
+
+document.getElementById("btn-help").addEventListener("click", (e) => {
+  e.target.blur();
+  if (document.querySelector(".help-toast")) { document.querySelector(".help-toast").remove(); return; }
+  const h = document.createElement("div"); h.className = "help-toast";
+  h.innerHTML = `<button class="ht-close">&times;</button>
+    <strong>Enter</strong> para gravar a palavra.<br>
+    <span style="color:var(--color-correct)">&#9632;</span> Certa, sítio certo &nbsp;
+    <span style="color:var(--color-misplaced)">&#9632;</span> Certa, sítio errado &nbsp;
+    <span style="color:var(--color-wrong)">&#9632;</span> Não existe<br>
+    Clica numa casa ou ← → para mover o cursor.<br>
+    Sem tentativas? Podes continuar (+3) ou desistir.`;
+  document.body.appendChild(h);
+  h.querySelector(".ht-close").addEventListener("click", () => h.remove());
+});
+</script>
+</body>
+</html>
